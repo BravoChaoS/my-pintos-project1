@@ -187,32 +187,40 @@ lock_acquire(struct lock *lock) {
     ASSERT(!intr_context());
     ASSERT(!lock_held_by_current_thread(lock));
 
+    struct thread *current_thread = thread_current();
+    struct lock *wl, *ml;
+    enum intr_level old_level;
+
     if (lock->holder != NULL && !thread_mlfqs) {
-        thread_current()->waiting_lock = lock;
-        struct lock *wlock = lock;
-        while (wlock != NULL && thread_current()->priority > wlock->max_priority) {
-            wlock->max_priority = thread_current()->priority;
-            struct list_elem *max_priority_in_locks = list_max(&wlock->holder->locks, lock_compare_priority, NULL);
-            int maximal = list_entry(max_priority_in_locks,
-            struct lock,elem)->max_priority;
-            if (wlock->holder->priority < maximal)
-                wlock->holder->priority = maximal;
-            wlock = wlock->holder->waiting_lock;
+        current_thread->waiting_lock = lock;
+        wl = lock;
+        while (wl != NULL && current_thread->priority > wl->max_priority) {
+            wl->max_priority = current_thread->priority;
+            struct list_elem *prior_lock = list_max(&wl->holder->locks, lock_compare_priority, NULL);
+            ml = list_entry(prior_lock, struct lock, elem);
+            if (wl->holder->priority < ml->max_priority)
+                wl->holder->priority = ml->max_priority;
+            wl = wl->holder->waiting_lock;
         }
     }
-
     sema_down(&lock->semaphore);
-    lock->holder = thread_current();
 
+    old_level = intr_disable();
+
+    current_thread = thread_current();
     if (!thread_mlfqs) {
-        thread_current()->waiting_lock = NULL;
-        lock->max_priority = thread_current()->priority;
-        list_push_back(&thread_current()->locks, &lock->elem);
-        if (lock->max_priority > thread_current()->priority) {
-            thread_current()->priority = lock->max_priority;
+        current_thread->waiting_lock = NULL;
+        lock->max_priority = current_thread->priority;
+        list_push_back(&current_thread->locks, &lock->elem);
+        if (current_thread->priority < lock->max_priority) {
+            current_thread->priority = lock->max_priority;
             thread_yield();
         }
     }
+
+    lock->holder = current_thread;
+
+    intr_set_level(old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -244,18 +252,18 @@ lock_release(struct lock *lock) {
     ASSERT(lock != NULL);
     ASSERT(lock_held_by_current_thread(lock));
 
-    if (!thread_mlfqs) {
+
+    if(!thread_mlfqs){
+        struct thread *current_thread = thread_current();
         list_remove(&lock->elem);
-        int maximal = thread_current()->original_priority;
-        if (!list_empty(&thread_current()->locks)) {
-            struct list_elem *max_priority_in_locks = list_max(&thread_current()->locks, lock_compare_priority,
-                                                               NULL);
-            int p = list_entry(max_priority_in_locks,
-            struct lock,elem)->max_priority;
-            if (p > maximal)
-                maximal = p;
+        int maxi = thread_current()->original_priority;
+        if (!list_empty(&current_thread->locks)) {
+            struct list_elem *prior_lock = list_max(&thread_current()->locks, lock_compare_priority, NULL);
+            struct lock *wl = list_entry(prior_lock, struct lock, elem);
+            if(maxi < wl->max_priority)
+                maxi = wl->max_priority;
         }
-        thread_current()->priority = maximal;
+        current_thread->priority = maxi;
     }
 
     lock->holder = NULL;
@@ -339,8 +347,8 @@ cond_signal(struct condition *cond, struct lock *lock UNUSED) {
     ASSERT(lock_held_by_current_thread(lock));
 
     if (!list_empty(&cond->waiters)) {
-        struct list_elem *prior = list_pop_max(&cond->waiters, cond_compare_priority, NULL);
-        sema_up(&list_entry(prior,
+        struct list_elem *prior_thread = list_pop_max(&cond->waiters, cond_compare_priority, NULL);
+        sema_up(&list_entry(prior_thread,
         struct semaphore_elem,elem)->semaphore);
     }
 }
