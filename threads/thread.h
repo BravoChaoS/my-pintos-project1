@@ -4,7 +4,6 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-#include "fixed_point.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -104,9 +103,12 @@ struct thread
 
     int64_t ticks_blocked;
 
-    int def_priority;
+    int original_priority;
     struct list locks;
-    struct lock *lock_waiting;
+    struct lock *waiting_lock;
+
+    int nice;                           /* Niceness of thread used in mlfqs */
+    int64_t recent_cpu;                 /* Used in mlfqs */
   };
 
 /* If false (default), use round-robin scheduler.
@@ -150,5 +152,8 @@ void thread_update_blocked(struct thread *t, void *aux);
 // todo: compare function used in thread/next_thread_to_run
 bool thread_compare_priority(const struct list_elem *a, const struct list_elem *b);
 
-
+void increase_recent_cpu(void);
+void modify_priority(struct thread *t,void *aux UNUSED);
+void modify_cpu(struct thread *t,void *aux UNUSED);
+void modify_load_avg(void);
 #endif /* threads/thread.h */
