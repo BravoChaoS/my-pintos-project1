@@ -522,3 +522,9 @@ list_min (struct list *list, list_less_func *less, void *aux)
     }
   return min;
 }
+
+struct list_elem * list_pop_max(struct list *list, list_less_func *less, void *aux){
+    struct list_elem *prior_thread = list_max(list, less, NULL);
+    list_remove(prior_thread);
+    return prior_thread;
+}
