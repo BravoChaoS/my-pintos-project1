@@ -90,7 +90,7 @@ timer_elapsed(int64_t then) {
 void
 timer_sleep(int64_t ticks) {
 //  todo: 5.6.1: return when ticks is zero or negative
-    if(ticks <= 0)
+    if (ticks <= 0)
         return;
 
     ASSERT(intr_get_level() == INTR_ON);
@@ -173,6 +173,21 @@ timer_interrupt(struct intr_frame *args UNUSED) {
     thread_tick();
 //    todo: use thread_update_blocked
     thread_foreach(thread_update_blocked, NULL);
+
+    if (thread_mlfqs) {
+        ASSERT(intr_context());
+
+
+        thread_mlfqs_increase_recent_cpu(thread_current());
+
+        if (ticks % TIMER_FREQ == 0){
+            thread_mlfqs_update_load_avg();
+            thread_foreach(thread_mlfqs_update_recent_cpu, NULL);
+        }
+        else if (ticks % 4 == 0) {
+            thread_foreach(thread_mlfqs_update_priority, NULL);
+        }
+    }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

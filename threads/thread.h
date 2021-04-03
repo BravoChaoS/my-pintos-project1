@@ -107,6 +107,9 @@ struct thread
     int original_priority;
     struct list locks;
     struct lock *waiting_lock;
+
+    int nice;
+    int64_t  recent_cpu;
   };
 
 /* If false (default), use round-robin scheduler.
@@ -150,5 +153,10 @@ void thread_update_blocked(struct thread *t, void *aux);
 // todo: compare function used in thread/next_thread_to_run
 bool thread_compare_priority(const struct list_elem *a, const struct list_elem *b);
 
+// todo: mlfqs
+void thread_mlfqs_increase_recent_cpu(struct thread *t);
+void thread_mlfqs_update_load_avg();
+void thread_mlfqs_update_recent_cpu(struct thread *t, void *aux);
+void thread_mlfqs_update_priority(struct thread *t, void *aux);
 
 #endif /* threads/thread.h */
